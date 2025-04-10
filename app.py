@@ -96,25 +96,43 @@ if st.button("🚀 Treinar Modelo"):
     st.pyplot(fig)
 
 # Classificação de nova imagem
+
 def load_model():
     return tf.keras.models.load_model("pool_classifier_model.h5")
 
 st.markdown("---")
-st.write("Faça upload de uma imagem para classificar com o modelo treinado:")
-classify_file = st.file_uploader("Imagem para classificar", type=["jpg", "jpeg", "png"], key="classify")
+st.write("Faça upload de uma imagem para identificar regiões com piscina:")
+classify_file = st.file_uploader("Imagem grande para detectar piscinas", type=["jpg", "jpeg", "png"], key="detect")
 
 if classify_file:
-    img = Image.open(classify_file).convert("RGB").resize((64, 64))
-    st.image(img, caption="Imagem para classificação", use_column_width=True)
+    original_img = Image.open(classify_file).convert("RGB")
+    st.image(original_img, caption="Imagem original", use_column_width=True)
 
     if os.path.exists("pool_classifier_model.h5"):
         model = load_model()
-        img_array = np.array(img) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
-        pred = model.predict(img_array)[0][0]
-        label = "✅ Piscina detectada" if pred > 0.5 else "❌ Sem piscina"
+        img_array = np.array(original_img)
+        h, w, _ = img_array.shape
 
-        color = "green" if pred > 0.5 else "red"
-        st.markdown(f"<h3 style='color:{color};'>Resultado: {label} (confiança: {pred:.2f})</h3>", unsafe_allow_html=True)
+        patch_size = 64
+        stride = 32
+        heatmap = np.zeros((h // stride, w // stride))
+
+        for i in range(0, h - patch_size, stride):
+            for j in range(0, w - patch_size, stride):
+                patch = img_array[i:i+patch_size, j:j+patch_size]
+                patch_input = np.expand_dims(patch / 255.0, axis=0)
+                pred = model.predict(patch_input, verbose=0)[0][0]
+                heatmap[i // stride, j // stride] = pred
+
+        from scipy.ndimage import zoom
+        heatmap_resized = zoom(heatmap, stride, order=1)
+        heatmap_resized = np.clip(heatmap_resized, 0, 1)
+
+        plt.figure(figsize=(10, 6))
+        plt.imshow(original_img)
+        plt.imshow(heatmap_resized, cmap='jet', alpha=0.4)
+        plt.title("Mapa de calor de detecção de piscinas")
+        plt.axis('off')
+        st.pyplot(plt)
     else:
         st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
