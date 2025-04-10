@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import folium
-from streamlit_folium import st_folium
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -97,18 +95,43 @@ if st.button("🚀 Treinar Modelo"):
     ax2.legend()
     st.pyplot(fig)
 
-# Mapa interativo com folium
+# Classificação de nova imagem
+def load_model():
+    return tf.keras.models.load_model("pool_classifier_model.h5")
+
 st.markdown("---")
-st.subheader("🗺️ Mapa Interativo para Detecção de Piscinas")
-st.write("Navegue no mapa, clique em um ponto e copie as coordenadas para capturar área.")
+st.write("Faça upload de uma imagem para identificar regiões com piscina:")
+classify_file = st.file_uploader("Imagem grande para detectar piscinas", type=["jpg", "jpeg", "png"], key="detect")
 
-center = [-23.55, -46.63]
-map_obj = folium.Map(location=center, zoom_start=17)
-map_obj.add_child(folium.LatLngPopup())
-st_data = st_folium(map_obj, width=700, height=500)
+if classify_file:
+    original_img = Image.open(classify_file).convert("RGB")
+    st.image(original_img, caption="Imagem original", use_column_width=True)
 
-if st_data and st_data['last_clicked']:
-    lat = st_data['last_clicked']['lat']
-    lon = st_data['last_clicked']['lng']
-    st.info(f"Coordenadas selecionadas: Latitude: {lat:.5f}, Longitude: {lon:.5f}")
-    st.warning("⚠️ Por enquanto, faça um screenshot manual da área mostrada e envie acima para classificação.")
+    if os.path.exists("pool_classifier_model.h5"):
+        model = load_model()
+        img_array = np.array(original_img)
+        h, w, _ = img_array.shape
+
+        patch_size = 64
+        stride = 32
+        heatmap = np.zeros((h // stride, w // stride))
+
+        for i in range(0, h - patch_size, stride):
+            for j in range(0, w - patch_size, stride):
+                patch = img_array[i:i+patch_size, j:j+patch_size]
+                patch_input = np.expand_dims(patch / 255.0, axis=0)
+                pred = model.predict(patch_input, verbose=0)[0][0]
+                heatmap[i // stride, j // stride] = pred
+
+        from scipy.ndimage import zoom
+        heatmap_resized = zoom(heatmap, stride, order=1)
+        heatmap_resized = np.clip(heatmap_resized, 0, 1)
+
+        plt.figure(figsize=(10, 6))
+        plt.imshow(original_img)
+        plt.imshow(heatmap_resized, cmap='jet', alpha=0.4)
+        plt.title("Mapa de calor de detecção de piscinas")
+        plt.axis('off')
+        st.pyplot(plt)
+    else:
+        st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
