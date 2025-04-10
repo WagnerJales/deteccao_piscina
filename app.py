@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import leafmap.foliumap as leafmap
+import folium
+from streamlit_folium import st_folium
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -96,14 +97,18 @@ if st.button("🚀 Treinar Modelo"):
     ax2.legend()
     st.pyplot(fig)
 
-# Mapa interativo com Leafmap
+# Mapa interativo com folium
 st.markdown("---")
 st.subheader("🗺️ Mapa Interativo para Detecção de Piscinas")
-st.write("Navegue pelo mapa abaixo e escolha uma área para detectar piscinas.")
+st.write("Navegue no mapa, clique em um ponto e copie as coordenadas para capturar área.")
 
-with st.expander("Mostrar mapa interativo"):
-    m = leafmap.Map(center=[-23.55, -46.63], zoom=16)
-    m.add_basemap("OpenStreetMap")
-    m.to_streamlit(height=500)
+center = [-23.55, -46.63]
+map_obj = folium.Map(location=center, zoom_start=17)
+map_obj.add_child(folium.LatLngPopup())
+st_data = st_folium(map_obj, width=700, height=500)
 
-st.warning("⚠️ Integração automática com imagens do mapa ainda requer API externa ou captura manual. Para testes locais, baixe um screenshot do mapa e envie para o classificador acima.")
+if st_data and st_data['last_clicked']:
+    lat = st_data['last_clicked']['lat']
+    lon = st_data['last_clicked']['lng']
+    st.info(f"Coordenadas selecionadas: Latitude: {lat:.5f}, Longitude: {lon:.5f}")
+    st.warning("⚠️ Por enquanto, faça um screenshot manual da área mostrada e envie acima para classificação.")
