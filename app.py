@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import cv2
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -124,8 +123,10 @@ if classify_file:
                 pred = model.predict(patch_input, verbose=0)[0][0]
                 heatmap[i // stride, j // stride] = pred
 
-        # Redimensionar heatmap para coincidir exatamente com a imagem original
-        heatmap_resized = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LINEAR)
+        # Redimensionar heatmap com PIL
+        heatmap_img = Image.fromarray((heatmap * 255).astype(np.uint8))
+        heatmap_resized = heatmap_img.resize((w, h), resample=Image.BILINEAR)
+        heatmap_resized = np.array(heatmap_resized) / 255.0
         heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
         # Slider de transparência
@@ -145,4 +146,3 @@ if classify_file:
             st.download_button("📥 Baixar imagem com heatmap", data=file, file_name="heatmap_piscinas.png")
     else:
         st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
-
