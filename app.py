@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import geopandas as gpd
+from shapely.geometry import box
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -115,6 +117,7 @@ if classify_file:
         patch_size = 64
         stride = 32
         heatmap = np.zeros((h // stride, w // stride))
+        geometries = []
 
         for i in range(0, h - patch_size, stride):
             for j in range(0, w - patch_size, stride):
@@ -122,17 +125,27 @@ if classify_file:
                 patch_input = np.expand_dims(patch / 255.0, axis=0)
                 pred = model.predict(patch_input, verbose=0)[0][0]
                 heatmap[i // stride, j // stride] = pred
+                if pred > 0.7:
+                    rect = box(j, i, j+patch_size, i+patch_size)
+                    geometries.append(rect)
 
-        # Redimensionar heatmap com PIL
+        # Criar GeoDataFrame
+        gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:3857")
+        gpkg_path = "piscinas_detectadas.gpkg"
+        gdf.to_file(gpkg_path, driver="GPKG")
+        st.success("Arquivo GPKG gerado com as regiões detectadas!")
+
+        with open(gpkg_path, "rb") as f:
+            st.download_button("📍 Baixar regiões detectadas (GeoPackage)", data=f, file_name="piscinas_detectadas.gpkg")
+
+        # Mostrar heatmap
+        from PIL import Image as PILImage
         heatmap_img = Image.fromarray((heatmap * 255).astype(np.uint8))
         heatmap_resized = heatmap_img.resize((w, h), resample=Image.BILINEAR)
         heatmap_resized = np.array(heatmap_resized) / 255.0
         heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
-        # Slider de transparência
         alpha = st.slider("Transparência do mapa de calor", min_value=0.0, max_value=1.0, value=0.4, step=0.05)
-
-        # Plotar com opção de exportar
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.imshow(original_img)
         ax.imshow(heatmap_resized, cmap='jet', alpha=alpha)
@@ -140,7 +153,6 @@ if classify_file:
         ax.axis('off')
         st.pyplot(fig)
 
-        # Salvar a imagem com heatmap
         fig.savefig("heatmap_output.png", bbox_inches='tight')
         with open("heatmap_output.png", "rb") as file:
             st.download_button("📥 Baixar imagem com heatmap", data=file, file_name="heatmap_piscinas.png")
