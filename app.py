@@ -83,8 +83,8 @@ if st.button("🚀 Treinar Modelo"):
     history = model.fit(train_data, epochs=5, validation_data=val_data)
     st.success("Modelo treinado com sucesso!")
 
-    model.save("pool_classifier_model.h5")
-    st.write("Modelo salvo como pool_classifier_model.h5")
+    model.save("pool_classifier_model", save_format="tf")
+    st.write("Modelo salvo como pool_classifier_model")
 
     # Plotar métricas
     st.write("### Desempenho do Treinamento")
@@ -101,7 +101,7 @@ if st.button("🚀 Treinar Modelo"):
 
 # Classificação de nova imagem
 def load_model():
-    return tf.keras.models.load_model("pool_classifier_model.h5")
+    return tf.keras.models.load_model("pool_classifier_model")
 
 st.markdown("---")
 st.write("Faça upload de uma imagem para identificar regiões com piscina:")
@@ -111,7 +111,7 @@ if classify_file:
     original_img = Image.open(classify_file).convert("RGB")
     st.image(original_img, caption="Imagem original", use_container_width=True)
 
-    if os.path.exists("pool_classifier_model.h5"):
+    if os.path.exists("pool_classifier_model"):
         model = load_model()
         img_array = np.array(original_img)
         h, w, _ = img_array.shape
@@ -120,6 +120,7 @@ if classify_file:
         stride = 32
         heatmap = np.zeros((h // stride, w // stride))
         features = []
+        csv_data = []
 
         for i in range(0, h - patch_size, stride):
             for j in range(0, w - patch_size, stride):
@@ -138,9 +139,14 @@ if classify_file:
                         },
                         "properties": {"probabilidade": float(pred)}
                     })
+                    csv_data.append({
+                        "x": j + patch_size // 2,
+                        "y": i + patch_size // 2,
+                        "probabilidade": round(float(pred), 4)
+                    })
 
+        # Gerar GeoJSON
         geojson = {"type": "FeatureCollection", "features": features}
-
         with tempfile.TemporaryDirectory() as tmpdir:
             json_path = os.path.join(tmpdir, "detected.geojson")
             with open(json_path, "w") as f:
@@ -150,6 +156,14 @@ if classify_file:
                 zipf.write(json_path, arcname="detected.geojson")
             with open(zip_path, "rb") as f:
                 st.download_button("📍 Baixar GeoJSON das regiões detectadas", data=f, file_name="piscinas_detectadas.zip")
+
+        # Gerar CSV com centroides
+        if csv_data:
+            df = pd.DataFrame(csv_data)
+            csv_path = "centroides_detectados.csv"
+            df.to_csv(csv_path, index=False)
+            with open(csv_path, "rb") as f:
+                st.download_button("📍 Baixar CSV com centroides das piscinas", data=f, file_name="centroides_detectados.csv")
 
         # Mostrar heatmap
         from PIL import Image as PILImage
