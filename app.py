@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import cv2
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -20,7 +21,7 @@ uploaded_file = st.file_uploader("Envie uma imagem", type=["jpg", "jpeg", "png"]
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Imagem enviada", use_column_width=True)
+    st.image(image, caption="Imagem enviada", use_container_width=True)
 
     col1, col2 = st.columns(2)
 
@@ -105,7 +106,7 @@ classify_file = st.file_uploader("Imagem grande para detectar piscinas", type=["
 
 if classify_file:
     original_img = Image.open(classify_file).convert("RGB")
-    st.image(original_img, caption="Imagem original", use_column_width=True)
+    st.image(original_img, caption="Imagem original", use_container_width=True)
 
     if os.path.exists("pool_classifier_model.h5"):
         model = load_model()
@@ -123,15 +124,25 @@ if classify_file:
                 pred = model.predict(patch_input, verbose=0)[0][0]
                 heatmap[i // stride, j // stride] = pred
 
-        from scipy.ndimage import zoom
-        heatmap_resized = zoom(heatmap, stride, order=1)
+        # Redimensionar heatmap para coincidir exatamente com a imagem original
+        heatmap_resized = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LINEAR)
         heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
-        plt.figure(figsize=(10, 6))
-        plt.imshow(original_img)
-        plt.imshow(heatmap_resized, cmap='jet', alpha=0.4)
-        plt.title("Mapa de calor de detecção de piscinas")
-        plt.axis('off')
-        st.pyplot(plt)
+        # Slider de transparência
+        alpha = st.slider("Transparência do mapa de calor", min_value=0.0, max_value=1.0, value=0.4, step=0.05)
+
+        # Plotar com opção de exportar
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.imshow(original_img)
+        ax.imshow(heatmap_resized, cmap='jet', alpha=alpha)
+        ax.set_title("Mapa de calor de detecção de piscinas")
+        ax.axis('off')
+        st.pyplot(fig)
+
+        # Salvar a imagem com heatmap
+        fig.savefig("heatmap_output.png", bbox_inches='tight')
+        with open("heatmap_output.png", "rb") as file:
+            st.download_button("📥 Baixar imagem com heatmap", data=file, file_name="heatmap_piscinas.png")
     else:
         st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
+
