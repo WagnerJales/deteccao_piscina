@@ -172,3 +172,4 @@ if classify_file:
             st.download_button("📥 Baixar imagem com heatmap", data=file, file_name="heatmap_piscinas.png")
     else:
         st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
+
