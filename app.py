@@ -8,8 +8,12 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import geopandas as gpd
 from shapely.geometry import box
+import fiona
+import tempfile
+import zipfile
+import shutil
+import json
 
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
@@ -117,7 +121,7 @@ if classify_file:
         patch_size = 64
         stride = 32
         heatmap = np.zeros((h // stride, w // stride))
-        geometries = []
+        features = []
 
         for i in range(0, h - patch_size, stride):
             for j in range(0, w - patch_size, stride):
@@ -126,17 +130,23 @@ if classify_file:
                 pred = model.predict(patch_input, verbose=0)[0][0]
                 heatmap[i // stride, j // stride] = pred
                 if pred > 0.7:
-                    rect = box(j, i, j+patch_size, i+patch_size)
-                    geometries.append(rect)
+                    features.append({
+                        "type": "Feature",
+                        "geometry": box(j, i, j+patch_size, i+patch_size).__geo_interface__,
+                        "properties": {"probabilidade": float(pred)}
+                    })
 
-        # Criar GeoDataFrame
-        gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:3857")
-        gpkg_path = "piscinas_detectadas.gpkg"
-        gdf.to_file(gpkg_path, driver="GPKG")
-        st.success("Arquivo GPKG gerado com as regiões detectadas!")
+        geojson = {"type": "FeatureCollection", "features": features}
 
-        with open(gpkg_path, "rb") as f:
-            st.download_button("📍 Baixar regiões detectadas (GeoPackage)", data=f, file_name="piscinas_detectadas.gpkg")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = os.path.join(tmpdir, "detected.geojson")
+            with open(json_path, "w") as f:
+                json.dump(geojson, f)
+            zip_path = os.path.join(tmpdir, "piscinas_detectadas.zip")
+            with zipfile.ZipFile(zip_path, "w") as zipf:
+                zipf.write(json_path, arcname="detected.geojson")
+            with open(zip_path, "rb") as f:
+                st.download_button("📍 Baixar GeoJSON das regiões detectadas", data=f, file_name="piscinas_detectadas.zip")
 
         # Mostrar heatmap
         from PIL import Image as PILImage
