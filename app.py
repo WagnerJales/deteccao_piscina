@@ -84,7 +84,7 @@ if st.button("🚀 Treinar Modelo"):
     history = model.fit(train_data, epochs=5, validation_data=val_data)
     st.success("Modelo treinado com sucesso!")
 
-    model.save("pool_classifier_model")
+    model.save("pool_classifier_model.keras")
     st.write("Modelo salvo como pool_classifier_model")
 
     st.write("### Desempenho do Treinamento")
@@ -101,7 +101,7 @@ if st.button("🚀 Treinar Modelo"):
 
 # Classificação de nova imagem
 def load_model():
-    return tf.keras.models.load_model("pool_classifier_model")
+    return tf.keras.models.load_model("pool_classifier_model.keras")
 
 st.markdown("---")
 st.write("Faça upload de uma imagem para identificar regiões com piscina:")
@@ -111,7 +111,7 @@ if classify_file:
     original_img = Image.open(classify_file).convert("RGB")
     st.image(original_img, caption="Imagem original", use_container_width=True)
 
-    if os.path.exists("pool_classifier_model"):
+    if os.path.exists("pool_classifier_model.keras"):
         model = load_model()
         img_array = np.array(original_img)
         h, w, _ = img_array.shape
@@ -164,3 +164,4 @@ if classify_file:
             st.download_button("📥 Baixar imagem com heatmap", data=file, file_name="heatmap_piscinas.png")
     else:
         st.warning("Modelo ainda não foi treinado. Treine o modelo primeiro.")
+
