@@ -84,7 +84,7 @@ if st.button("🚀 Treinar Modelo"):
     history = model.fit(train_data, epochs=5, validation_data=val_data)
     st.success("Modelo treinado com sucesso!")
 
-    model.save("pool_classifier_model", save_format="tf")
+    model.save("pool_classifier_model")
     st.write("Modelo salvo como pool_classifier_model")
 
     st.write("### Desempenho do Treinamento")
