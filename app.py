@@ -16,6 +16,7 @@ import json
 # Diretórios para armazenar imagens rotuladas
 os.makedirs("data/positive", exist_ok=True)
 os.makedirs("data/negative", exist_ok=True)
+os.makedirs("patches_detected", exist_ok=True)
 
 st.title("Classificador de Piscinas em Imagens")
 st.write("Faça upload de imagens de satélite e rotule como contendo ou não piscina.")
@@ -86,7 +87,6 @@ if st.button("🚀 Treinar Modelo"):
     model.save("pool_classifier_model", save_format="tf")
     st.write("Modelo salvo como pool_classifier_model")
 
-    # Plotar métricas
     st.write("### Desempenho do Treinamento")
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
     ax1.plot(history.history['accuracy'], label='Treino')
@@ -119,8 +119,7 @@ if classify_file:
         patch_size = 64
         stride = 32
         heatmap = np.zeros((h // stride, w // stride))
-        features = []
-        csv_data = []
+        patch_count = 0
 
         for i in range(0, h - patch_size, stride):
             for j in range(0, w - patch_size, stride):
@@ -128,44 +127,24 @@ if classify_file:
                 patch_input = np.expand_dims(patch / 255.0, axis=0)
                 pred = model.predict(patch_input, verbose=0)[0][0]
                 heatmap[i // stride, j // stride] = pred
+
                 if pred > 0.7:
-                    features.append({
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Polygon",
-                            "coordinates": [[
-                                [j, i], [j+patch_size, i], [j+patch_size, i+patch_size], [j, i+patch_size], [j, i]
-                            ]]
-                        },
-                        "properties": {"probabilidade": float(pred)}
-                    })
-                    csv_data.append({
-                        "x": j + patch_size // 2,
-                        "y": i + patch_size // 2,
-                        "probabilidade": round(float(pred), 4)
-                    })
+                    patch_img = Image.fromarray(patch)
+                    patch_filename = f"patches_detected/piscina_{patch_count}.png"
+                    patch_img.save(patch_filename)
+                    patch_count += 1
 
-        # Gerar GeoJSON
-        geojson = {"type": "FeatureCollection", "features": features}
-        with tempfile.TemporaryDirectory() as tmpdir:
-            json_path = os.path.join(tmpdir, "detected.geojson")
-            with open(json_path, "w") as f:
-                json.dump(geojson, f)
-            zip_path = os.path.join(tmpdir, "piscinas_detectadas.zip")
+        if patch_count > 0:
+            st.success(f"{patch_count} regiões com piscina foram detectadas e salvas como imagens!")
+            zip_path = "patches_detectadas.zip"
             with zipfile.ZipFile(zip_path, "w") as zipf:
-                zipf.write(json_path, arcname="detected.geojson")
+                for file in os.listdir("patches_detected"):
+                    zipf.write(os.path.join("patches_detected", file), arcname=file)
             with open(zip_path, "rb") as f:
-                st.download_button("📍 Baixar GeoJSON das regiões detectadas", data=f, file_name="piscinas_detectadas.zip")
+                st.download_button("📥 Baixar patches detectados (ZIP)", data=f, file_name=zip_path)
+        else:
+            st.info("Nenhuma piscina detectada com alta confiança.")
 
-        # Gerar CSV com centroides
-        if csv_data:
-            df = pd.DataFrame(csv_data)
-            csv_path = "centroides_detectados.csv"
-            df.to_csv(csv_path, index=False)
-            with open(csv_path, "rb") as f:
-                st.download_button("📍 Baixar CSV com centroides das piscinas", data=f, file_name="centroides_detectados.csv")
-
-        # Mostrar heatmap
         from PIL import Image as PILImage
         heatmap_img = Image.fromarray((heatmap * 255).astype(np.uint8))
         heatmap_resized = heatmap_img.resize((w, h), resample=Image.BILINEAR)
